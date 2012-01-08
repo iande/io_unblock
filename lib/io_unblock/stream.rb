@@ -3,7 +3,7 @@ module IoUnblock
   
   class Stream
     MAX_BYTES_PER_WRITE = 1024 * 8
-    MAX_BYTES_PER_READ = 16 #1024 * 4
+    MAX_BYTES_PER_READ = 1024 * 4
     
     attr_reader :running, :connected
     alias :running? :running
