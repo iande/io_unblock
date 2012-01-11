@@ -1,11 +1,11 @@
 module IoUnblock
-  require 'thread'
+  class StreamError < IoUnblockError; end
   
   class Stream
     MAX_BYTES_PER_WRITE = 1024 * 8
     MAX_BYTES_PER_READ = 1024 * 4
     
-    attr_reader :running, :connected
+    attr_reader :running, :connected, :io, :io_selector, :callbacks
     alias :running? :running
     alias :connected? :connected
 
@@ -24,26 +24,25 @@ module IoUnblock
     # - stopped: called when the IO processing has stopped
     def initialize io, callbacks=nil
       @io = io
+      @io_selector = [@io]
       @processor = nil
       @s_mutex = Mutex.new
-      @w_mutex = Mutex.new
-      @w_buff = []
+      @w_buff = IoUnblock::Buffer.new
       @running = false
       @connected = true
       @callbacks = callbacks || {}
-      setup_delegation
+      Delegation.define_io_methods self
     end
     
     def start &cb
       @s_mutex.synchronize do
-        unless @running
-          @running = true
-          @processor = Thread.new do
-            trigger_callbacks :started, :start, &cb
-            io_loop while running? && connected?
-            flush_and_close
-            trigger_callbacks :stopped, :stop, &cb
-          end
+        raise StreamError, "already started" if @running
+        @running = true
+        @processor = Thread.new do
+          trigger_callbacks :started, :start, &cb
+          read_and_write while running? && connected?
+          flush_and_close
+          trigger_callbacks :stopped, :stop, &cb
         end
       end
       self
@@ -62,7 +61,7 @@ module IoUnblock
     # The callback triggered here will be invoked only when all bytes
     # have been written.
     def write bytes, &cb
-      push_write bytes, cb
+      @w_buff.push bytes, cb
       self
     end
     
@@ -73,55 +72,49 @@ private
     end
 
     def flush_and_close
-      io_write while connected? && !@w_buff.empty?
+      _write while connected? && @w_buff.buffered?
       io_close
       self
     end
     
-    def io_loop
-      io_read
-      io_write
+    def read_and_write
+      _read if read?
+      _write if write?
       self
     end
 
-    def io_read
-      if read_ready?
-        begin
-          bytes = read_nonblock MAX_BYTES_PER_READ
-          trigger_callbacks :read, bytes
-        rescue Errno::EINTR, Errno::EAGAIN, Errno::EWOULDBLOCK
-        rescue EOFError
-          force_close $!
-        rescue Exception
-          force_close $!
-        end
+    def _read
+      begin
+        bytes = io_read MAX_BYTES_PER_READ
+        trigger_callbacks :read, bytes
+      rescue Errno::EINTR, Errno::EAGAIN, Errno::EWOULDBLOCK
+      rescue Exception
+        force_close $!
       end
     end
     
-    def io_write
-      if write_ready?
-        written = 0
-        while written < MAX_BYTES_PER_WRITE
-          bytes, cb = shift_write
-          break unless bytes
-          begin
-            w = write_nonblock bytes
-          rescue Errno::EINTR, Errno::EAGAIN, Errno::EWOULDBLOCK
-            # writing will either block, or cannot otherwise be completed,
-            # put data back and try again some other day
-            unshift_write bytes, cb
-            break
-          rescue Exception
-            force_close $!
-            break
-          end
-          written += w
-          if w < bytes.size
-            unshift_write bytes[w..-1], cb
-            trigger_callbacks :wrote, bytes, w
-          else
-            trigger_callbacks :wrote, bytes, w, &cb
-          end
+    def _write
+      written = 0
+      while written < MAX_BYTES_PER_WRITE
+        bytes, cb = @w_buff.shift
+        break unless bytes
+        begin
+          w = io_write bytes
+        rescue Errno::EINTR, Errno::EAGAIN, Errno::EWOULDBLOCK
+          # writing will either block, or cannot otherwise be completed,
+          # put data back and try again some other day
+          @w_buff.unshift bytes, cb
+          break
+        rescue Exception
+          force_close $!
+          break
+        end
+        written += w
+        if w < bytes.size
+          @w_buff.unshift bytes[w..-1], cb
+          trigger_callbacks :wrote, bytes, w
+        else
+          trigger_callbacks :wrote, bytes, w, &cb
         end
       end
     end
@@ -139,54 +132,21 @@ private
       io_close
     end
     
-    def write_ready?
+    def write?
       begin
-        connected? && @w_buff.size > 0 && IO.select(nil, [@io], nil, 0.1)
+        connected? && @w_buff.buffered? && writeable?
       rescue Exception
         force_close $!
         false
       end
     end
     
-    def read_ready?
+    def read?
       begin
-        connected? && IO.select([@io], nil, nil, 0.1)
+        connected? && readable?
       rescue Exception
         force_close $!
         false
-      end
-    end
-    
-    def push_write bytes, cb
-      @w_mutex.synchronize { @w_buff.push [bytes, cb] }
-    end
-    
-    def shift_write
-      @w_mutex.synchronize { @w_buff.shift }
-    end
-    
-    def unshift_write bytes, cb
-      @w_mutex.synchronize { @w_buff.unshift [bytes, cb] }
-    end
-    
-    def setup_delegation
-      setup_write_delegation
-      setup_read_delegation
-    end
-    
-    def setup_write_delegation
-      if @io.respond_to? :write_nonblock
-        def self.write_nonblock bytes; @io.write_nonblock bytes; end
-      else
-        def self.write_nonblock bytes; @io.write bytes; end
-      end
-    end
-    
-    def setup_read_delegation
-      if @io.respond_to? :read_nonblock
-        def self.read_nonblock sz; @io.read_nonblock sz; end
-      else
-        def self.read_nonblock sz; @io.readpartial sz; end
       end
     end
   end

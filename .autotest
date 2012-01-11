@@ -1,0 +1,18 @@
+# -*- ruby -*-
+
+require 'autotest/restart'
+require 'autotest/growl'
+
+Autotest.add_hook :initialize do |at|
+  at.testlib = 'minitest/spec'
+  
+  at.clear_mappings
+  at.add_mapping(/^lib\/(.*)\.rb$/) { |f, m| "spec/#{m[1]}_spec.rb" }
+  at.add_mapping(/^spec\/.*_spec\.rb$/) { |f,_| f }
+  at.add_mapping(/^spec\/spec_helper\.rb$/) { |f,_|
+    at.files_matching(/^spec\/.*_spec\.rb$/)
+  }
+  
+  at.add_exception '.git'
+  at.add_exception 'coverage'
+end
