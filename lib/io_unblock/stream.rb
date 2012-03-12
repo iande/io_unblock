@@ -11,7 +11,7 @@ module IoUnblock
 
     # The given IO object, `io`, is assumed to be opened/connected.
     # Global callbacks:
-    # - failure: called when IO access throws an exception that cannot
+    # - failed: called when IO access throws an exception that cannot
     #            be recovered from (opening the IO fails,
     #            TCP connection reset, unexpected EOF, etc.)
     # - read:    called when any data is read from the underlying IO
@@ -128,7 +128,7 @@ private
     end
     
     def force_close ex
-      trigger_callbacks :failure, ex
+      trigger_callbacks :failed, ex
       io_close
     end
     

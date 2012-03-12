@@ -7,6 +7,7 @@ if ENV['SCOV']
 end
 
 require 'minitest/autorun'
+require 'minitest/emoji'
 require 'io_unblock'
 require 'stringio'
 
@@ -18,6 +19,7 @@ class DummyIO
   attr_accessor :readable, :writeable
   attr_accessor :write_delay, :read_delay
   attr_accessor :max_write, :max_read
+  attr_accessor :raise_read, :raise_write
   alias :readable? :readable
   alias :writeable? :writeable
   
@@ -29,6 +31,8 @@ class DummyIO
     @max_write = 0
     @max_read = 0
     @closed = false
+    @raise_read = nil
+    @raise_write = nil
   end
   
   def close
@@ -39,6 +43,7 @@ class DummyIO
   
   def write_nonblock bytes
     sleep(@write_delay) if @write_delay > 0
+    raise @raise_write if @raise_write
     if @max_write > 0 && bytes.size > @max_write
       @w_stream.write bytes[0...@max_write]
     else
@@ -48,8 +53,8 @@ class DummyIO
   
   def read_nonblock len
     sleep(@read_delay) if @read_delay > 0
+    raise @raise_read if @raise_read
     if @max_read > 0 && len > @max_read
-      puts "Only reading: #{@max_read} bytes"
       @r_stream.read @max_read
     else
       @r_stream.read len

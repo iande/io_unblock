@@ -12,3 +12,5 @@ task :coverage do
   ENV['SCOV'] = '1'
   Rake::Task['test'].invoke
 end
+
+task :default => [:test]
