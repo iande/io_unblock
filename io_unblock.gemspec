@@ -7,9 +7,9 @@ Gem::Specification.new do |s|
   s.version     = IoUnblock::VERSION
   s.authors     = ["Ian D. Eccles"]
   s.email       = ["ian.eccles@gmail.com"]
-  s.homepage    = ""
-  s.summary     = %q{TODO: Write a gem summary}
-  s.description = %q{TODO: Write a gem description}
+  s.homepage    = "https://github.com/iande/io_unblock"
+  s.summary     = %q{Non-blocking IO reads/writes wrapped in a thread}
+  s.description = %q{Non-blocking IO reads/writes wrapped in a thread}
 
   s.rubyforge_project = "io_unblock"
 
