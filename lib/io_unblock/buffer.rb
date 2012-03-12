@@ -1,5 +1,7 @@
 module IoUnblock
   # A very simple synchronized buffer.
+  #
+  # @api private
   class Buffer
     
     def initialize
@@ -8,27 +10,27 @@ module IoUnblock
     end
     
     def push bytes, cb
-      @mutex.synchronize { @buffer.push [bytes, cb] }
+      synched { @buffer.push [bytes, cb] }
     end
     
     def pop
-      @mutex.synchronize { @buffer.pop }
+      synched { @buffer.pop }
     end
         
     def unshift bytes, cb
-      @mutex.synchronize { @buffer.unshift [bytes, cb] }
+      synched { @buffer.unshift [bytes, cb] }
     end
     
     def shift
-      @mutex.synchronize { @buffer.shift }
+      synched { @buffer.shift }
     end
     
     def first
-      @mutex.synchronize { @buffer.first }
+      synched { @buffer.first }
     end
     
     def last
-      @mutex.synchronize { @buffer.last }
+      synched { @buffer.last }
     end
     
     def empty?
@@ -38,6 +40,11 @@ module IoUnblock
     
     def buffered?
       !empty?
+    end
+
+private
+    def synched &block
+      @mutex.synchronize(&block)
     end
   end
 end

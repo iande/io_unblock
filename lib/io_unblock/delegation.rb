@@ -2,6 +2,8 @@ module IoUnblock
   # Handles delegating read and write methods to their non-blocking
   # counterparts on the IO object. If the IO object does not support
   # non-blocking methods, falls back to blocking ones.
+  #
+  # @api private
   module Delegation
     module NonBlockingWrites
       def io_write bytes; io.write_nonblock bytes; end
@@ -19,7 +21,7 @@ module IoUnblock
     end
     
     module SelectWriteable
-      def writeable?; !!IO.select(nil, io_selector, nil, 0.1); end
+      def writeable?; !!IO.select(nil, io_selector, nil, select_delay); end
       private :writeable?
     end
     
@@ -44,7 +46,7 @@ module IoUnblock
     end
     
     module SelectReadable
-      def readable?; !!IO.select(io_selector, nil, nil, 0.1); end
+      def readable?; !!IO.select(io_selector, nil, nil, select_delay); end
       private :readable?
     end
     

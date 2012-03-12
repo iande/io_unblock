@@ -6,6 +6,7 @@ module IoUnblock
     MAX_BYTES_PER_READ = 1024 * 4
     
     attr_reader :running, :connected, :io, :io_selector, :callbacks
+    attr_accessor :select_delay
     alias :running? :running
     alias :connected? :connected
 
@@ -22,6 +23,7 @@ module IoUnblock
     #            if it is closed as a result of a failure)
     # - started: called when the IO processing has started
     # - stopped: called when the IO processing has stopped
+    # - looped:  called when each time the IO processing loops
     def initialize io, callbacks=nil
       @io = io
       @io_selector = [@io]
@@ -31,7 +33,9 @@ module IoUnblock
       @running = false
       @connected = true
       @callbacks = callbacks || {}
+      @select_delay = 0.1
       Delegation.define_io_methods self
+      yield self if block_given?
     end
     
     def start &cb
@@ -80,13 +84,14 @@ private
     def read_and_write
       _read if read?
       _write if write?
+      trigger_callbacks :looped, self
       self
     end
 
     def _read
       begin
         bytes = io_read MAX_BYTES_PER_READ
-        trigger_callbacks :read, bytes
+        trigger_callbacks(:read, bytes) if bytes
       rescue Errno::EINTR, Errno::EAGAIN, Errno::EWOULDBLOCK
       rescue Exception
         force_close $!
@@ -128,8 +133,8 @@ private
     end
     
     def force_close ex
-      trigger_callbacks :failed, ex
       io_close
+      trigger_callbacks :failed, ex
     end
     
     def write?

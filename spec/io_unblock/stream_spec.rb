@@ -36,7 +36,7 @@ describe IoUnblock::Stream do
     dummy_io.closed?.must_equal true
   end
   
-  it "flushes all writes before stopping" do
+  it "flushes all writes before stopping (even if io claims to be unwriteable)" do
     dummy_io.writeable = false
     stream.start
     stream.write 'hello '
@@ -47,102 +47,153 @@ describe IoUnblock::Stream do
     dummy_io.w_stream.string.must_equal 'hello world.'
   end
 
+  it "does not die on EINTER" do
+    dummy_io.raise_write = Errno::EINTR.new
+    dummy_io.raise_read = Errno::EINTR.new
+    stream.start
+    stream.write 'hello'
+    Thread.pass until dummy_io.raised_read?
+    stream.connected?.must_equal true
+    dummy_io.raise_read = nil
+    Thread.pass until dummy_io.raised_write?
+    stream.connected?.must_equal true
+    dummy_io.raise_write = nil
+    stream.stop
+    dummy_io.w_stream.string.must_equal 'hello'
+  end
+
+  it "does not die on EAGAIN" do
+    dummy_io.raise_write = Errno::EAGAIN.new
+    dummy_io.raise_read = Errno::EINTR.new
+    stream.start
+    stream.write 'hello'
+    Thread.pass until dummy_io.raised_read?
+    stream.connected?.must_equal true
+    dummy_io.raise_read = nil
+    Thread.pass until dummy_io.raised_write?
+    stream.connected?.must_equal true
+    dummy_io.raise_write = nil
+    stream.stop
+    dummy_io.w_stream.string.must_equal 'hello'
+  end
+
+  it "does not die on EWOULDBLOCK" do
+    dummy_io.raise_write = Errno::EWOULDBLOCK.new
+    dummy_io.raise_read = Errno::EINTR.new
+    stream.start
+    stream.write 'hello'
+    Thread.pass until dummy_io.raised_read?
+    stream.connected?.must_equal true
+    dummy_io.raise_read = nil
+    Thread.pass until dummy_io.raised_write?
+    stream.connected?.must_equal true
+    dummy_io.raise_write = nil
+    stream.stop
+    dummy_io.w_stream.string.must_equal 'hello'
+  end
+
   describe "callbacks" do
-    def start_cb; @start_cb ||= MiniTest::Mock.new; end
-    def stop_cb; @stop_cb ||= MiniTest::Mock.new; end
-    def fail_cb; @fail_cb ||= MiniTest::Mock.new; end
-    def wrote_cb; @wrote_cb ||= MiniTest::Mock.new; end
-    def read_cb; @read_cb ||= MiniTest::Mock.new; end
-    def close_cb; @close_cb ||= MiniTest::Mock.new; end
+    def called_with; @calls_received ||= []; end
+    def callback; @callback ||= lambda { |*a| called_with << a }; end
 
     def callback_stream cbs=nil
       IoUnblock::Stream.new(dummy_io, cbs)
     end
 
     it "triggers started when starting" do
-      cb_stream = callback_stream(started: start_cb)
-      start_cb.expect(:call, nil, [:start])
+      cb_stream = callback_stream(started: callback)
       cb_stream.start
       cb_stream.stop
-      start_cb.verify
+      called_with.must_equal [ [:start] ]
     end
 
     it "triggers stopped when stopping" do
-      cb_stream = callback_stream(stopped: stop_cb)
-      stop_cb.expect(:call, nil, [:stop])
+      cb_stream = callback_stream(stopped: callback)
       cb_stream.start
       cb_stream.stop
-      stop_cb.verify
+      called_with.must_equal [ [:stop] ]
+    end
+
+    it "triggers looped after each read/write cycle" do
+      cb_stream = callback_stream(looped: callback)
+      cb_stream.start
+      Thread.pass while called_with.empty?
+      cb_stream.stop
+      called_with.first.must_equal [cb_stream]
     end
 
     it "triggers wrote when writing" do
       dummy_io.max_write = 3
-      wrote_cb.expect(:call, nil, ['hel', 3])
-      wrote_cb.expect(:call, nil, ['lo', 2])
-      cb_stream = callback_stream(wrote: wrote_cb)
+      cb_stream = callback_stream(wrote: callback)
       cb_stream.start
       cb_stream.write "hello"
       cb_stream.stop
-      wrote_cb.verify
+      called_with.must_equal [ ['hello', 3], ['lo', 2] ]
     end
 
     it "triggers read when reading" do
       dummy_io.max_read = 3
       dummy_io.r_stream.string = 'hello'
-      read_cb.expect(:call, nil, ['hel'])
-      read_cb.expect(:call, nil, ['lo'])
-      cb_stream = callback_stream(read: read_cb)
+      cb_stream = callback_stream(read: callback)
       cb_stream.start
       Thread.pass until dummy_io.r_stream.eof?
       cb_stream.stop
-      read_cb.verify
+      called_with.must_equal [ ['hel'], ['lo'] ]
     end
 
     it "triggers closed when closing" do
-      close_cb.expect(:call, nil, [])
-      cb_stream = callback_stream(closed: close_cb)
+      cb_stream = callback_stream(closed: callback)
       cb_stream.start
       cb_stream.stop
-      close_cb.verify
+      called_with.must_equal [ [] ]
     end
 
     it "triggers failed when reading raises an error" do
       err = RuntimeError.new "fail"
-      fail_cb.expect(:call, nil, [err])
-      cb_stream = callback_stream(failed: fail_cb)
+      cb_stream = callback_stream(failed: callback)
       dummy_io.raise_read = err
       cb_stream.start
       Thread.pass until cb_stream.running?
       Thread.pass while cb_stream.connected?
       cb_stream.stop
-      fail_cb.verify
+      called_with.must_equal [ [err] ]
     end
 
     it "triggers failed when writing raises an error" do
       err = RuntimeError.new "fail"
-      fail_cb.expect(:call, nil, [err])
-      cb_stream = callback_stream(failed: fail_cb)
+      cb_stream = callback_stream(failed: callback)
       dummy_io.raise_write = err
       cb_stream.start
       cb_stream.write "hello"
       cb_stream.stop
-      fail_cb.verify
+      called_with.must_equal [ [err] ]
     end
     
     it "triggers the given callback when starting and stopping" do
-      called_with = []
-      stream.start { |state| called_with << state }
+      stream.start(&callback)
       stream.stop
-      called_with.must_equal [:start, :stop]
+      called_with.must_equal [ [:start], [:stop]]
     end
 
     it "triggers the given callback after writing the full string" do
-      called_with = []
       dummy_io.max_write = 3
       stream.start
-      stream.write('hello') { |wrote, len| called_with << [wrote, len] }
+      stream.write('hello', &callback)
       stream.stop
       called_with.must_equal [ ['lo', 2] ]
+    end
+    
+    it "is not connected when failed is triggered" do
+      is_connected = true
+      cb_stream = callback_stream(
+        failed: lambda { |ex| is_connected = cb_stream.connected? }
+      )
+      err = RuntimeError.new "fail"
+      dummy_io.raise_write = err
+      cb_stream.start
+      cb_stream.write "hello"
+      cb_stream.stop
+      is_connected.must_equal false
     end
   end
 end
