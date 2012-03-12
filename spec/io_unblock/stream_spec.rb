@@ -101,21 +101,21 @@ describe IoUnblock::Stream do
     end
 
     it "triggers started when starting" do
-      cb_stream = callback_stream(started: callback)
+      cb_stream = callback_stream(:started => callback)
       cb_stream.start
       cb_stream.stop
       called_with.must_equal [ [:start] ]
     end
 
     it "triggers stopped when stopping" do
-      cb_stream = callback_stream(stopped: callback)
+      cb_stream = callback_stream(:stopped => callback)
       cb_stream.start
       cb_stream.stop
       called_with.must_equal [ [:stop] ]
     end
 
     it "triggers looped after each read/write cycle" do
-      cb_stream = callback_stream(looped: callback)
+      cb_stream = callback_stream(:looped => callback)
       cb_stream.start
       Thread.pass while called_with.empty?
       cb_stream.stop
@@ -124,7 +124,7 @@ describe IoUnblock::Stream do
 
     it "triggers wrote when writing" do
       dummy_io.max_write = 3
-      cb_stream = callback_stream(wrote: callback)
+      cb_stream = callback_stream(:wrote => callback)
       cb_stream.start
       cb_stream.write "hello"
       cb_stream.stop
@@ -134,7 +134,7 @@ describe IoUnblock::Stream do
     it "triggers read when reading" do
       dummy_io.max_read = 3
       dummy_io.r_stream.string = 'hello'
-      cb_stream = callback_stream(read: callback)
+      cb_stream = callback_stream(:read => callback)
       cb_stream.start
       Thread.pass until dummy_io.r_stream.eof?
       cb_stream.stop
@@ -142,7 +142,7 @@ describe IoUnblock::Stream do
     end
 
     it "triggers closed when closing" do
-      cb_stream = callback_stream(closed: callback)
+      cb_stream = callback_stream(:closed => callback)
       cb_stream.start
       cb_stream.stop
       called_with.must_equal [ [] ]
@@ -150,7 +150,7 @@ describe IoUnblock::Stream do
 
     it "triggers failed when reading raises an error" do
       err = RuntimeError.new "fail"
-      cb_stream = callback_stream(failed: callback)
+      cb_stream = callback_stream(:failed => callback)
       dummy_io.raise_read = err
       cb_stream.start
       Thread.pass until cb_stream.running?
@@ -161,7 +161,7 @@ describe IoUnblock::Stream do
 
     it "triggers failed when writing raises an error" do
       err = RuntimeError.new "fail"
-      cb_stream = callback_stream(failed: callback)
+      cb_stream = callback_stream(:failed => callback)
       dummy_io.raise_write = err
       cb_stream.start
       cb_stream.write "hello"
@@ -186,7 +186,7 @@ describe IoUnblock::Stream do
     it "is not connected when failed is triggered" do
       is_connected = true
       cb_stream = callback_stream(
-        failed: lambda { |ex| is_connected = cb_stream.connected? }
+        :failed => lambda { |ex| is_connected = cb_stream.connected? }
       )
       err = RuntimeError.new "fail"
       dummy_io.raise_write = err
