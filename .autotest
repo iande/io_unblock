@@ -1,4 +1,4 @@
-# -*- ruby -*-
+# vim: set filetype=ruby : 
 
 require 'autotest/restart'
 require 'autotest/growl'
