@@ -24,6 +24,7 @@ module IoUnblock
     # - started: called when the IO processing has started
     # - stopped: called when the IO processing has stopped
     # - looped:  called when each time the IO processing loops
+    # - callback_failed: called when an exception is raised within a callback
     def initialize io, callbacks=nil
       @io = io
       @io_selector = [@io]
@@ -73,6 +74,13 @@ private
     def trigger_callbacks named, *args, &other
       other && other.call(*args)
       @callbacks.key?(named) && @callbacks[named].call(*args)
+    rescue Exception => ex
+      if named == :callback_failed
+        warn "Exception raised in callback_failed handler: #{ex}"
+        ex.backtrace.each { |b| warn b }
+      else
+        trigger_callbacks :callback_failed, ex, named
+      end
     end
 
     def flush_and_close

@@ -195,5 +195,24 @@ describe IoUnblock::Stream do
       cb_stream.stop
       is_connected.must_equal false
     end
+
+    it "triggers callback_failed when a callback raises an exception" do
+      cb_err = RuntimeError.new 'failback!'
+      cb_stream = callback_stream(:callback_failed => callback)
+      cb_stream.start
+      cb_stream.write('a test') { raise cb_err }
+      cb_stream.stop
+      called_with.must_equal [ [cb_err, :wrote] ]
+    end
+
+    it "warns when triggering callback_failed raises an exception" do
+      cb_err = RuntimeError.new 'failback!'
+      cb_stream = callback_stream(
+        :callback_failed => lambda { |*_| raise cb_err }
+      )
+      cb_stream.start
+      cb_stream.write('another test') { raise cb_err }
+      cb_stream.stop
+    end
   end
 end
