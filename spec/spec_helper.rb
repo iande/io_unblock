@@ -7,7 +7,7 @@ if ENV['SCOV']
 end
 
 require 'minitest/autorun'
-require 'minitest/emoji'
+#require 'minitest/emoji'
 require 'io_unblock'
 require 'stringio'
 
