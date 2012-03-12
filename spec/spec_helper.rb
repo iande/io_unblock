@@ -6,8 +6,11 @@ if ENV['SCOV']
   end
 end
 
-require 'minitest/autorun'
-#require 'minitest/emoji'
+begin
+  require 'minitest/autorun'
+  require 'minitest/emoji'
+rescue LoadError
+end
 require 'io_unblock'
 require 'stringio'
 
