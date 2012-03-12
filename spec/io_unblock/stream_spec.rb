@@ -1,6 +1,4 @@
 require File.expand_path("../../spec_helper.rb", __FILE__)
-require 'stringio'
-require 'logger'
 
 describe IoUnblock::Stream do
   def dummy_io; @dummy_io ||= DummyIO.new; end
