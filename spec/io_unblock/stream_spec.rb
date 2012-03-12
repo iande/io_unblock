@@ -2,8 +2,6 @@ require File.expand_path("../../spec_helper.rb", __FILE__)
 require 'stringio'
 require 'logger'
 
-$log = Logger.new $stdout
-
 describe IoUnblock::Stream do
   def dummy_io; @dummy_io ||= DummyIO.new; end
   def stream; @stream ||= IoUnblock::Stream.new dummy_io; end
