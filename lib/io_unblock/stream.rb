@@ -5,7 +5,7 @@ module IoUnblock
     MAX_BYTES_PER_WRITE = 1024 * 8
     MAX_BYTES_PER_READ = 1024 * 4
     
-    attr_reader :running, :connected, :io, :io_selector, :callbacks
+    attr_reader :running, :connected, :io, :callbacks
     attr_accessor :select_delay
     alias :running? :running
     alias :connected? :connected
@@ -54,11 +54,10 @@ module IoUnblock
     end
     
     def stop
-      @s_mutex.synchronize do
-        if @running
-          @running = false
-          @processor.join
-        end
+      if @processor == Thread.current
+        stop_inside
+      else
+        stop_outside
       end
       self
     end
@@ -69,15 +68,32 @@ module IoUnblock
       @w_buff.push bytes, cb
       self
     end
+
+    def alive?
+      @processor && @processor.alive?
+    end
     
 private
+    def stop_inside
+      @running = false
+    end
+
+    def stop_outside
+      @s_mutex.synchronize do
+        if @running
+          @running = false
+          @processor.join
+        end
+      end
+    end
+
     def trigger_callbacks named, *args, &other
       other && other.call(*args)
       @callbacks.key?(named) && @callbacks[named].call(*args)
     rescue Exception => ex
       if named == :callback_failed
         warn "Exception raised in callback_failed handler: #{ex}"
-        ex.backtrace.each { |b| warn b }
+        warn "From: #{ex.backtrace.first}"
       else
         trigger_callbacks :callback_failed, ex, named
       end

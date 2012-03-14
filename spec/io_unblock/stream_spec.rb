@@ -1,8 +1,19 @@
 require File.expand_path("../../spec_helper.rb", __FILE__)
 
 describe IoUnblock::Stream do
+  include Stubz
   def dummy_io; @dummy_io ||= DummyIO.new; end
   def stream; @stream ||= IoUnblock::Stream.new dummy_io; end
+
+  # Watch for Thread exceptions
+  before do
+    @th_abort = Thread.abort_on_exception
+    Thread.abort_on_exception = true
+  end
+
+  after do
+    Thread.abort_on_exception = @th_abort
+  end
   
   it "raises an exception if started twice" do
     stream.start
@@ -202,13 +213,29 @@ describe IoUnblock::Stream do
     end
 
     it "warns when triggering callback_failed raises an exception" do
+      warn_lines = []
       cb_err = RuntimeError.new 'failback!'
       cb_stream = callback_stream(
         :callback_failed => lambda { |*_| raise cb_err }
       )
+      stub(cb_stream, :warn) { |w| warn_lines << w }
       cb_stream.start
       cb_stream.write('another test') { raise cb_err }
       cb_stream.stop
+      warn_lines.first.must_equal 'Exception raised in callback_failed handler: failback!'
+      /\AFrom: /.must_match warn_lines.last
+    end
+
+    it "stops properly when called within the processor thread" do
+      stopped_called = false
+      cb_stream = callback_stream(
+        :looped => lambda { |s| sleep 0.25; s.stop },
+        :stopped => lambda { |s| stopped_called = true }
+      )
+      cb_stream.start
+      Thread.pass until cb_stream.running?
+      Thread.pass while cb_stream.alive?
+      stopped_called.must_equal true
     end
   end
 end
