@@ -5,7 +5,7 @@ module IoUnblock
     MAX_BYTES_PER_WRITE = 1024 * 8
     MAX_BYTES_PER_READ = 1024 * 4
     
-    attr_reader :running, :connected, :io, :callbacks
+    attr_reader :running, :connected, :io, :io_selector, :callbacks
     attr_accessor :select_delay
     alias :running? :running
     alias :connected? :connected
