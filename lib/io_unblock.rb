@@ -1,10 +1,10 @@
 require 'thread'
-require "io_unblock/version"
-
-module IoUnblock
-  class IoUnblockError < StandardError; end
-end
-
+require 'socket'
+require 'forwardable'
+require 'io_unblock/version'
+require 'io_unblock/errors'
 require 'io_unblock/delegation'
 require 'io_unblock/buffer'
 require 'io_unblock/stream'
+require 'io_unblock/tcp_socket'
+
