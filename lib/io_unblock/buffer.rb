@@ -9,16 +9,16 @@ module IoUnblock
       @mutex = Mutex.new
     end
     
-    def push bytes, cb
-      synched { @buffer.push [bytes, cb] }
+    def push bytes, cb, cb_args
+      synched { @buffer.push [bytes, cb, cb_args] }
     end
     
     def pop
       synched { @buffer.pop }
     end
         
-    def unshift bytes, cb
-      synched { @buffer.unshift [bytes, cb] }
+    def unshift bytes, cb, cb_args
+      synched { @buffer.unshift [bytes, cb, cb_args] }
     end
     
     def shift

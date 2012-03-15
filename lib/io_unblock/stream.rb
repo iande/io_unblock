@@ -64,8 +64,8 @@ module IoUnblock
     
     # The callback triggered here will be invoked only when all bytes
     # have been written.
-    def write bytes, &cb
-      @w_buff.push bytes, cb
+    def write bytes, *cb_args, &cb
+      @w_buff.push bytes, cb, cb_args
       self
     end
 
@@ -87,9 +87,8 @@ private
       end
     end
 
-    def trigger_callbacks named, *args, &other
-      other && other.call(*args)
-      @callbacks.key?(named) && @callbacks[named].call(*args)
+    def guard_callback named, cb, *args
+      cb && cb.call(*args)
     rescue Exception => ex
       if named == :callback_failed
         warn "Exception raised in callback_failed handler: #{ex}"
@@ -97,6 +96,11 @@ private
       else
         trigger_callbacks :callback_failed, ex, named
       end
+    end
+
+    def trigger_callbacks named, *args, &other
+      guard_callback named, other, *args
+      guard_callback named, @callbacks[named], *args
     end
 
     def flush_and_close
@@ -125,25 +129,26 @@ private
     def _write
       written = 0
       while written < MAX_BYTES_PER_WRITE
-        bytes, cb = @w_buff.shift
+        bytes, cb, cb_args = @w_buff.shift
         break unless bytes
         begin
           w = io_write bytes
         rescue Errno::EINTR, Errno::EAGAIN, Errno::EWOULDBLOCK
           # writing will either block, or cannot otherwise be completed,
           # put data back and try again some other day
-          @w_buff.unshift bytes, cb
+          @w_buff.unshift bytes, cb, cb_args
           break
         rescue Exception
           force_close $!
           break
         end
         written += w
+        trigger_callbacks :wrote, bytes, w
         if w < bytes.size
-          @w_buff.unshift bytes[w..-1], cb
-          trigger_callbacks :wrote, bytes, w
+          @w_buff.unshift bytes[w..-1], cb, cb_args
         else
-          trigger_callbacks :wrote, bytes, w, &cb
+          # A separate callback invocation so we can pass custom args
+          guard_callback :wrote, cb, bytes, w, *cb_args
         end
       end
     end

@@ -190,6 +190,14 @@ describe IoUnblock::Stream do
       called_with.must_equal [ ['lo', 2] ]
     end
     
+    it "triggers the given callback after writing the full string with params" do
+      dummy_io.max_write = 3
+      stream.start
+      stream.write('hello', 'turbo', 'is', 'me', &callback)
+      stream.stop
+      called_with.must_equal [ ['lo', 2, 'turbo', 'is', 'me'] ]
+    end
+
     it "is not connected when failed is triggered" do
       is_connected = true
       cb_stream = callback_stream(
